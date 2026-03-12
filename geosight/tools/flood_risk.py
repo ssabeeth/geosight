@@ -20,7 +20,7 @@ class FloodRiskResult(BaseModel):
     summary: str = ""
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(1))
+@retry(stop=stop_after_attempt(2), wait=wait_fixed(2))
 def fetch_flood_risk(lat: float, lon: float, radius_km: float = 5.0) -> FloodRiskResult:
     """
     Fetch flood warnings and monitoring stations near a location.
@@ -33,7 +33,7 @@ def fetch_flood_risk(lat: float, lon: float, radius_km: float = 5.0) -> FloodRis
         f"{EA_BASE}/id/floods",
         params={"lat": lat, "long": lon, "dist": radius_km, "_limit": 20},
         headers=headers,
-        timeout=10,
+        timeout=20,
     )
     warnings_resp.raise_for_status()
     warnings_data = warnings_resp.json().get("items", [])
@@ -47,7 +47,7 @@ def fetch_flood_risk(lat: float, lon: float, radius_km: float = 5.0) -> FloodRis
         f"{EA_BASE}/id/stations",
         params={"lat": lat, "long": lon, "dist": radius_km, "_limit": 5},
         headers=headers,
-        timeout=10,
+        timeout=0,
     )
     stations_resp.raise_for_status()
     stations = stations_resp.json().get("items", [])
