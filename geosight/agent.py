@@ -15,6 +15,7 @@ from geosight.tools.geocoder import geocode_postcode, GeoLocation
 from geosight.tools.flood_risk import fetch_flood_risk, FloodRiskResult
 from geosight.tools.protected_areas import fetch_protected_areas, ProtectedAreasResult
 from geosight.tools.land_use import fetch_land_use, LandUseResult
+from geosight.rag.retriever import retrieve, RAGResult
 
 
 # ---------------------------------------------------------------------------
@@ -24,7 +25,7 @@ from geosight.tools.land_use import fetch_land_use, LandUseResult
 class GeoSightState(TypedDict):
     # Inputs
     postcode: str
-
+    rag: RAGResult | None
     # Intermediate results
     location: GeoLocation | None
     flood_risk: FloodRiskResult | None
@@ -88,6 +89,26 @@ def node_land_use(state: GeoSightState) -> dict:
         return {"land_use": result, "errors": []}
     except Exception as e:
         return {"land_use": None, "errors": [f"Land use failed: {e}"]}
+def node_rag(state: GeoSightState) -> dict:
+    if not state.get("location"):
+        return {"rag": None, "errors": []}
+    try:
+        loc = state["location"]
+        pa = state.get("protected_areas")
+        flood = state.get("flood_risk")
+
+        query_parts = [f"land use planning policy for {loc.county or 'England'}"]
+        if pa and pa.designations:
+            types = list({d.type for d in pa.designations})
+            query_parts.append(f"planning restrictions near {' and '.join(types)}")
+        if flood and flood.severe_warnings > 0:
+            query_parts.append("flood risk development planning")
+
+        query = ". ".join(query_parts)
+        result = retrieve(query)
+        return {"rag": result, "errors": []}
+    except Exception as e:
+        return {"rag": None, "errors": [f"RAG retrieval failed: {e}"]}
 
 
 def node_synthesise(state: GeoSightState) -> dict:
@@ -107,8 +128,16 @@ def node_synthesise(state: GeoSightState) -> dict:
         pa_section += f"\n\nDesignations:\n{desig_list}"
     lu_section = lu.summary if lu else "Land use data unavailable."
 
+    rag = state.get("rag")
+    rag_context = rag.context if rag else "Policy documents unavailable."
+    rag_sources = (
+        "\n".join(f"  [{i+1}] {c.source}, p.{c.page} (relevance: {c.score:.2f})"
+                  for i, c in enumerate(rag.chunks))
+        if rag else ""
+    )
+
     prompt = f"""You are a senior land and planning analyst. Using the data below,
-write a structured land intelligence report. Be specific and flag any planning constraints.
+write a structured land intelligence report. Cite policy sources by number where relevant.
 
 ## DATA
 
@@ -123,6 +152,9 @@ write a structured land intelligence report. Be specific and flag any planning c
 ### Land Use (within 500m)
 {lu_section}
 
+### Relevant Policy & Guidance
+{rag_context}
+
 ## REQUIRED OUTPUT FORMAT
 
 # Land Intelligence Report: {state['postcode'].upper()}
@@ -131,9 +163,13 @@ write a structured land intelligence report. Be specific and flag any planning c
 ## 2. Flood Risk Assessment
 ## 3. Protected Designations & Ecological Constraints
 ## 4. Land Use & Character
-## 5. Key Considerations & Summary
+## 5. Planning Policy Context
+## 6. Key Considerations & Summary
 
-Use RED/AMBER/GREEN ratings where relevant. Be direct and specific.
+## Policy Sources
+{rag_sources}
+
+Use RED/AMBER/GREEN ratings. Cite sources by number e.g. [1]. Be direct and specific.
 """
 
     llm = _get_llm()
@@ -152,20 +188,19 @@ def build_graph():
     graph.add_node("flood_risk", node_flood_risk)
     graph.add_node("protected_areas", node_protected_areas)
     graph.add_node("land_use", node_land_use)
+    graph.add_node("rag", node_rag)
     graph.add_node("synthesise", node_synthesise)
 
     graph.set_entry_point("geocode")
     graph.add_edge("geocode", "flood_risk")
     graph.add_edge("flood_risk", "protected_areas")
     graph.add_edge("protected_areas", "land_use")
-    graph.add_edge("land_use", "synthesise")
+    graph.add_edge("land_use", "rag")
+    graph.add_edge("rag", "synthesise")
     graph.add_edge("synthesise", END)
 
     return graph.compile()
-
-
 _graph = None
-
 def get_graph():
     global _graph
     if _graph is None:
@@ -174,7 +209,6 @@ def get_graph():
 
 
 def run_agent(postcode: str) -> GeoSightState:
-    """Entry point — run the full GeoSight agent pipeline."""
     graph = get_graph()
     initial_state: GeoSightState = {
         "postcode": postcode,
@@ -182,6 +216,7 @@ def run_agent(postcode: str) -> GeoSightState:
         "flood_risk": None,
         "protected_areas": None,
         "land_use": None,
+        "rag": None,
         "report": "",
         "errors": [],
     }
