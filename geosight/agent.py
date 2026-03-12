@@ -15,6 +15,7 @@ from geosight.tools.geocoder import geocode_postcode, GeoLocation
 from geosight.tools.flood_risk import fetch_flood_risk, FloodRiskResult
 from geosight.tools.protected_areas import fetch_protected_areas, ProtectedAreasResult
 from geosight.tools.land_use import fetch_land_use, LandUseResult
+from geosight.tools.vision import describe_land_image, VisionResult
 from geosight.rag.retriever import retrieve, RAGResult
 
 
@@ -31,7 +32,8 @@ class GeoSightState(TypedDict):
     flood_risk: FloodRiskResult | None
     protected_areas: ProtectedAreasResult | None
     land_use: LandUseResult | None
-
+    image_bytes: bytes | None
+    vision: VisionResult | None
     # Output
     report: str
     errors: Annotated[list[str], operator.add]
@@ -110,7 +112,24 @@ def node_rag(state: GeoSightState) -> dict:
     except Exception as e:
         return {"rag": None, "errors": [f"RAG retrieval failed: {e}"]}
 
-
+def node_vision(state: GeoSightState) -> dict:
+    image_bytes = state.get("image_bytes")
+    if not image_bytes:
+        return {
+            "vision": VisionResult(
+                description="No image provided.",
+                model_used="llava:7b",
+                image_provided=False
+            ),
+            "errors": []
+        }
+    try:
+        result = describe_land_image(image_path=None, image_bytes=image_bytes)
+        return {"vision": result, "errors": []}
+    except Exception as e:
+        return {"vision": None, "errors": [f"Vision analysis failed: {e}"]}
+def should_run_vision(state: GeoSightState) -> str:
+    return "vision" if state.get("image_bytes") else "rag"
 def node_synthesise(state: GeoSightState) -> dict:
     loc = state.get("location")
     flood = state.get("flood_risk")
@@ -127,6 +146,8 @@ def node_synthesise(state: GeoSightState) -> dict:
         )
         pa_section += f"\n\nDesignations:\n{desig_list}"
     lu_section = lu.summary if lu else "Land use data unavailable."
+    vis = state.get("vision")
+    vis_section = vis.description if vis and vis.image_provided else "No image provided."
 
     rag = state.get("rag")
     rag_context = rag.context if rag else "Policy documents unavailable."
@@ -151,6 +172,8 @@ write a structured land intelligence report. Cite policy sources by number where
 
 ### Land Use (within 500m)
 {lu_section}
+### Site Photograph Analysis
+{vis_section}
 
 ### Relevant Policy & Guidance
 {rag_context}
@@ -188,6 +211,7 @@ def build_graph():
     graph.add_node("flood_risk", node_flood_risk)
     graph.add_node("protected_areas", node_protected_areas)
     graph.add_node("land_use", node_land_use)
+    graph.add_node("vision", node_vision)
     graph.add_node("rag", node_rag)
     graph.add_node("synthesise", node_synthesise)
 
@@ -195,7 +219,12 @@ def build_graph():
     graph.add_edge("geocode", "flood_risk")
     graph.add_edge("flood_risk", "protected_areas")
     graph.add_edge("protected_areas", "land_use")
-    graph.add_edge("land_use", "rag")
+    graph.add_conditional_edges(
+        "land_use",
+        should_run_vision,
+        {"vision": "vision", "rag": "rag"},
+    )
+    graph.add_edge("vision", "rag")
     graph.add_edge("rag", "synthesise")
     graph.add_edge("synthesise", END)
 
@@ -208,14 +237,16 @@ def get_graph():
     return _graph
 
 
-def run_agent(postcode: str) -> GeoSightState:
+def run_agent(postcode: str, image_bytes: bytes | None = None) -> GeoSightState:
     graph = get_graph()
     initial_state: GeoSightState = {
         "postcode": postcode,
+        "image_bytes": image_bytes,
         "location": None,
         "flood_risk": None,
         "protected_areas": None,
         "land_use": None,
+        "vision": None,
         "rag": None,
         "report": "",
         "errors": [],
