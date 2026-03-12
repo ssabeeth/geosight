@@ -101,29 +101,31 @@ Navigate to `http://localhost:8501`. Enter a UK postcode. Click **Analyse Land**
 
 ---
 
-## Example Output
+## Example Outputs
 
-**Postcode: TQ13 8HH (Dartmoor, Devon)**
-```
-## 1. Location Overview
-Gidleigh, West Devon, Devon, England
+### TQ13 8HH — Dartmoor, Devon
+**Flood Risk:** 🟢 No active warnings within 5km  
+**Designations:** ⚠️ 2 found — North Dartmoor SSSI, Dartmoor National Park  
+**Land Use:** Woodland, scrubland, open water. Waterways: North Teign, Forder Brook  
+**Policy:** Development within National Parks should be limited [NPPF p.55]
 
-## 2. Flood Risk Assessment
-GREEN — No active flood warnings within 5km.
+---
 
-## 3. Protected Designations & Ecological Constraints
-AMBER — 2 designations found within 2km:
-- North Dartmoor SSSI (Wildlife & Countryside Act 1981)
-- DARTMOOR National Park
+### SO41 8DQ — New Forest, Hampshire
+**Flood Risk:** 🟢 No active warnings. Stations: Lymington, Yarmouth (Tide)  
+**Designations:** ⚠️ 5 found — The New Forest SSSI, Lymington River Reedbeds SSSI,
+Lymington River SSSI, Hurst Castle and Lymington River Estuary SSSI, New Forest National Park  
+**Land Use:** Allotments, meadow, grassland, residential. Waterways: Lymington River  
+**Policy:** High ecological sensitivity — Natural England consent required for any works near SSSI boundaries
 
-## 4. Land Use & Character
-Woodland / forest. Natural features: Open water, Scrubland,
-Woodland (Blackaton Wood). Waterways: North Teign, Forder Brook.
+---
 
-## 5. Planning Policy Context
-Development within National Parks should be limited [NPPF p.55].
-Sequential test applies for any flood risk zone development [NPPF p.50].
-```
+### E1 6RF — Whitechapel, London
+**Flood Risk:** 🟢 No active warnings. Stations: Westminster, Tower Pier (Thames Tideway)  
+**Designations:** ✅ None within 2km  
+**Land Use:** Brownfield, commercial (Old Truman Brewery), residential (Goodmans Fields,
+Middlesex Street Estate), retail, recreation ground  
+**Policy:** NPPF emphasis on effective use of brownfield land and mixed-use schemes applies
 
 ---
 
