@@ -51,6 +51,7 @@ def _get_llm():
             api_key=groq_key,
             model=os.getenv("GROQ_MODEL", "llama-3.2-3b-preview"),
             temperature=0.2,
+            max_tokens=2000,
         )
     return ChatOllama(
         base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
