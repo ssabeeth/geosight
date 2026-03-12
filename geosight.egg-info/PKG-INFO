@@ -1,0 +1,22 @@
+Metadata-Version: 2.4
+Name: geosight
+Version: 0.1.0
+Summary: UK Land Intelligence Agent
+Requires-Python: >=3.11
+Requires-Dist: langgraph>=0.2
+Requires-Dist: langchain>=0.3
+Requires-Dist: langchain-community>=0.3
+Requires-Dist: langchain-ollama>=0.2
+Requires-Dist: sentence-transformers>=3.0
+Requires-Dist: faiss-cpu>=1.8
+Requires-Dist: requests>=2.31
+Requires-Dist: pypdf>=4.0
+Requires-Dist: streamlit>=1.35
+Requires-Dist: streamlit-folium>=0.20
+Requires-Dist: folium>=0.17
+Requires-Dist: python-dotenv>=1.0
+Requires-Dist: pydantic>=2.0
+Requires-Dist: tenacity>=8.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+Requires-Dist: ruff>=0.4; extra == "dev"
