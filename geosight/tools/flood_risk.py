@@ -33,7 +33,7 @@ def fetch_flood_risk(lat: float, lon: float, radius_km: float = 5.0) -> FloodRis
         f"{EA_BASE}/id/floods",
         params={"lat": lat, "long": lon, "dist": radius_km, "_limit": 20},
         headers=headers,
-        timeout=20,
+        timeout=60,
     )
     warnings_resp.raise_for_status()
     warnings_data = warnings_resp.json().get("items", [])
@@ -47,7 +47,7 @@ def fetch_flood_risk(lat: float, lon: float, radius_km: float = 5.0) -> FloodRis
         f"{EA_BASE}/id/stations",
         params={"lat": lat, "long": lon, "dist": radius_km, "_limit": 5},
         headers=headers,
-        timeout=0,
+        timeout=60,
     )
     stations_resp.raise_for_status()
     stations = stations_resp.json().get("items", [])
