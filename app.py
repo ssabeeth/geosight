@@ -135,6 +135,9 @@ if run_button and postcode.strip():
     # ---------------------------------------------------------------------------
     # Map
     # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+    # Map
+    # ---------------------------------------------------------------------------
     loc = result.get("location")
     if loc:
         st.subheader("📍 Location")
@@ -143,6 +146,21 @@ if run_button and postcode.strip():
             zoom_start=13,
             tiles="CartoDB positron"
         )
+        folium.TileLayer(
+            tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+            attr="Esri",
+            name="Satellite",
+            overlay=False,
+            control=True,
+        ).add_to(m)
+        folium.TileLayer(
+            tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+            attr="Esri",
+            name="Terrain",
+            overlay=False,
+            control=True,
+        ).add_to(m)
+        folium.LayerControl(position="topright").add_to(m)
         folium.Marker(
             [loc.lat, loc.lon],
             popup=f"<b>{postcode.upper()}</b><br>{loc.display_name}",
@@ -156,7 +174,7 @@ if run_button and postcode.strip():
             fill_opacity=0.05,
             popup="2km search radius",
         ).add_to(m)
-        st_folium(m, width=None, height=380, returned_objects=[])
+        st_folium(m, width=None, height=380, returned_objects=[], key="main_map")
 
     # ---------------------------------------------------------------------------
     # Data panels
