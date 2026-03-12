@@ -15,6 +15,7 @@ dependencies = [
     "sentence-transformers>=3.0",
     "faiss-cpu>=1.8",
     "requests>=2.31",
+    "pyproj>=3.0",
     "pypdf>=4.0",
     "streamlit>=1.35",
     "streamlit-folium>=0.20",
