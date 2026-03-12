@@ -37,10 +37,6 @@ def describe_land_image(
     image_path: str | Path | None,
     image_bytes: bytes | None = None
 ) -> VisionResult:
-    """
-    Describe a land photograph using LLaVA via Ollama.
-    Accepts either a file path or raw bytes.
-    """
     if image_bytes is None and image_path is None:
         return VisionResult(
             description="No image provided.",
@@ -51,8 +47,43 @@ def describe_land_image(
     if image_bytes is None:
         image_bytes = Path(image_path).read_bytes()
 
-    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+    # Use Groq vision if API key is present
+    groq_key = os.getenv("GROQ_API_KEY")
+    if groq_key:
+        import base64 as b64
+        from groq import Groq
+        client = Groq(api_key=groq_key)
+        image_b64 = b64.b64encode(image_bytes).decode("utf-8")
+        response = client.chat.completions.create(
+            model="llava-v1.5-7b-4096-preview",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_b64}"
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": VISION_PROMPT
+                        }
+                    ]
+                }
+            ],
+            max_tokens=400,
+        )
+        description = response.choices[0].message.content.strip()
+        return VisionResult(
+            description=description,
+            model_used="llava-v1.5-7b-4096-preview",
+            image_provided=True,
+        )
 
+    # Fall back to local Ollama
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
     payload = {
         "model": VISION_MODEL,
         "prompt": VISION_PROMPT,
@@ -60,7 +91,6 @@ def describe_land_image(
         "stream": False,
         "options": {"temperature": 0.2, "num_predict": 400},
     }
-
     resp = requests.post(
         f"{OLLAMA_BASE_URL}/api/generate",
         json=payload,
@@ -68,7 +98,6 @@ def describe_land_image(
     )
     resp.raise_for_status()
     description = resp.json().get("response", "No description returned.").strip()
-
     return VisionResult(
         description=description,
         model_used=VISION_MODEL,

@@ -43,13 +43,20 @@ class GeoSightState(TypedDict):
 # LLM
 # ---------------------------------------------------------------------------
 
-def _get_llm() -> ChatOllama:
+def _get_llm():
+    groq_key = os.getenv("GROQ_API_KEY")
+    if groq_key:
+        from langchain_groq import ChatGroq
+        return ChatGroq(
+            api_key=groq_key,
+            model=os.getenv("GROQ_MODEL", "llama-3.2-3b-preview"),
+            temperature=0.2,
+        )
     return ChatOllama(
         base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
         model=os.getenv("OLLAMA_TEXT_MODEL", "llama3.2:3b"),
         temperature=0.2,
     )
-
 
 # ---------------------------------------------------------------------------
 # Nodes — one function per tool
