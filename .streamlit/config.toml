@@ -1,0 +1,4 @@
+# The app's custom CSS (dark title, navy button, green tags) is written for a light
+# background, so don't let Streamlit switch to dark mode and hide the title.
+[theme]
+base = "light"

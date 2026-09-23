@@ -18,7 +18,7 @@
 
 GeoSight is a LangGraph pipeline. For a postcode and an optional site photo it:
 
-1. **Geocodes** the postcode (OpenStreetMap Nominatim)
+1. **Geocodes** the postcode (postcodes.io, with OpenStreetMap Nominatim as a fallback)
 2. **Looks up flood risk** from two Environment Agency sources: the planning **flood zone** at the site, and **live warnings** within 5 km
 3. **Finds protected designations** (SSSIs, National Landscapes, NNRs, National Parks) within a true 2 km radius, and whether any covers the site (Natural England)
 4. **Lists land use** within 500 m (OpenStreetMap Overpass)
@@ -74,7 +74,7 @@ geocode → flood_risk → protected_areas → land_use ─┬─ vision (if pho
 | Vision model | Ollama `llava:7b` locally, or Groq `qwen/qwen3.8-27b` |
 | Embeddings | `sentence-transformers/all-MiniLM-L6-v2` |
 | Vector store | FAISS (committed, 415 chunks) |
-| Data | Environment Agency, Natural England, OpenStreetMap: all free, no keys |
+| Data | postcodes.io, Environment Agency, Natural England, OpenStreetMap: all free, no keys |
 | UI | Streamlit + Folium |
 
 ---
@@ -127,7 +127,7 @@ silently and shipped an index holding one document out of four.
 
 | Postcode | Place | Flood risk | Protected designations |
 |---|---|---|---|
-| TQ13 8HH | Gidleigh, Dartmoor | 🔴 Flood Zone 3 (river) | 🔴 Inside Dartmoor National Park; North Dartmoor SSSI within 2 km |
+| TQ13 8HH | Throwleigh, Dartmoor | 🔴 Flood Zone 3 (river) | 🔴 Inside Dartmoor National Park; North Dartmoor SSSI within 2 km |
 | SO41 8DQ | Lymington | 🔴 Flood Zone 3 (river) | 🟠 3 within 2 km: two SSSIs and the New Forest National Park |
 | SP6 1EF | Fordingbridge | 🟠 Flood Zone 2 (river) | 🟠 3 within 2 km: River Avon System SSSI, The New Forest SSSI, New Forest National Park |
 | E1 6RF | Whitechapel, London | 🟢 Flood Zone 1 | 🟢 None within 2 km |
@@ -165,7 +165,8 @@ so each chunk keeps its section heading for citation.
 
 - **Flood zones and warnings**: © Environment Agency. Open Government Licence v3.0.
 - **Protected areas**: © Natural England. Open Government Licence v3.0.
-- **Land use and geocoding**: © OpenStreetMap contributors. ODbL.
+- **Postcode locations**: [postcodes.io](https://postcodes.io). Contains OS data © Crown copyright and database right; Royal Mail data © Royal Mail copyright and database right; ONS data under the Open Government Licence v3.0.
+- **Land use and fallback geocoding**: © OpenStreetMap contributors. ODbL.
 - **Policy documents**: © Crown copyright. Open Government Licence v3.0.
 
 ---

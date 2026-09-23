@@ -5,6 +5,7 @@ import json
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+import requests
 import responses
 
 from geosight.tools import flood_risk, land_use, protected_areas, vision
@@ -17,21 +18,60 @@ STATIONS = f"{flood_risk.EA_MONITORING}/id/stations"
 
 # --- geocoder -------------------------------------------------------------------
 
-@responses.activate
-def test_geocode_parses_nominatim():
-    responses.get(NOMINATIM, json=[{
-        "lat": "50.9323", "lon": "-1.7827", "display_name": "SP6 1EF, Fordingbridge",
-        "address": {"county": "Hampshire"},
-    }])
-    loc = geocode_postcode("sp6 1ef ")
-    assert (loc.postcode, loc.lat, loc.lon, loc.county) == ("SP6 1EF", 50.9323, -1.7827, "Hampshire")
+POSTCODES_IO = "https://api.postcodes.io/postcodes/SP6%201EF"
+NOMINATIM_HIT = [{
+    "lat": "50.9323", "lon": "-1.7827", "display_name": "SP6 1EF, Fordingbridge",
+    "address": {"county": "Hampshire"},
+}]
 
 
 @responses.activate
-def test_geocode_unknown_postcode_raises():
-    responses.get(NOMINATIM, json=[])
+def test_geocode_uses_postcodes_io():
+    responses.get(POSTCODES_IO, json={"status": 200, "result": {
+        "postcode": "SP6 1EF", "latitude": 50.932323, "longitude": -1.782748,
+        "parish": "Fordingbridge", "admin_ward": "Fordingbridge", "admin_district": "New Forest",
+        "admin_county": "Hampshire", "region": "South East", "country": "England",
+    }})
+    loc = geocode_postcode(" SP6 1EF ")
+    assert (loc.postcode, loc.lat, loc.lon, loc.county) == ("SP6 1EF", 50.932323, -1.782748, "Hampshire")
+    assert loc.display_name == "SP6 1EF, Fordingbridge, New Forest, Hampshire, South East, England"
+
+
+@responses.activate
+def test_unparished_areas_use_the_ward_name():
+    responses.get("https://api.postcodes.io/postcodes/E1%206RF", json={"status": 200, "result": {
+        "postcode": "E1 6RF", "latitude": 51.518, "longitude": -0.0709,
+        "parish": "Tower Hamlets, unparished area", "admin_ward": "Spitalfields & Banglatown",
+        "admin_district": "Tower Hamlets", "admin_county": None, "region": "London", "country": "England",
+    }})
+    loc = geocode_postcode("E1 6RF")
+    assert loc.display_name == "E1 6RF, Spitalfields & Banglatown, Tower Hamlets, London, England"
+    assert loc.county == "Tower Hamlets"
+
+
+@responses.activate
+def test_unknown_postcode_raises_without_retrying_or_falling_back():
+    responses.get("https://api.postcodes.io/postcodes/ZZ99%209ZZ", status=404,
+                  json={"status": 404, "error": "Postcode not found"})
     with pytest.raises(ValueError, match="Could not geocode"):
         geocode_postcode("ZZ99 9ZZ")
+    assert len(responses.calls) == 1
+
+
+@responses.activate
+def test_geocode_falls_back_to_nominatim_when_postcodes_io_fails():
+    responses.get(POSTCODES_IO, status=503)
+    responses.get(NOMINATIM, json=NOMINATIM_HIT)
+    loc = geocode_postcode("SP6 1EF")
+    assert (loc.lat, loc.lon, loc.county) == (50.9323, -1.7827, "Hampshire")
+
+
+@responses.activate
+def test_geocode_raises_when_both_sources_are_down():
+    responses.get(POSTCODES_IO, status=503)
+    responses.get(NOMINATIM, status=429)
+    with pytest.raises(requests.HTTPError):
+        geocode_postcode("SP6 1EF")
 
 
 # --- flood risk -----------------------------------------------------------------

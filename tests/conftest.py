@@ -13,7 +13,8 @@ RETRYING = [
     flood_risk._fetch_live,
     protected_areas._query_names,
     land_use._overpass,
-    geocoder.geocode_postcode,
+    geocoder._from_postcodes_io,
+    geocoder._from_nominatim,
 ]
 
 
