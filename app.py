@@ -3,14 +3,15 @@ GeoSight — Streamlit UI
 Run: streamlit run app.py
 """
 
-import streamlit as st
 import folium
-from streamlit_folium import st_folium
+import streamlit as st
 from dotenv import load_dotenv
+from streamlit_folium import st_folium
 
 load_dotenv()
 
-from geosight.agent import run_agent
+from geosight import report  # noqa: E402  (needs .env loaded first)
+from geosight.agent import run_agent  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -86,7 +87,7 @@ with col_badges:
     <div style="text-align:right; margin-top:0.5rem;">
         <span class="tag">LangGraph</span>
         <span class="tag">RAG</span>
-        <span class="tag">LLaVA</span>
+        <span class="tag">Vision</span>
         <span class="tag">Free to run</span>
     </div>
     """, unsafe_allow_html=True)
@@ -109,10 +110,10 @@ with col_upload:
     uploaded_image = st.file_uploader(
         "Site photo (optional)",
         type=["jpg", "jpeg", "png", "webp"],
-        help="Upload a site photo for AI visual analysis via LLaVA.",
+        help="Upload a site photo for AI visual analysis.",
     )
 
-run_button = st.button("🔍 Analyse Land", use_container_width=True)
+run_button = st.button("🔍 Analyse Land", width="stretch")
 
 # ---------------------------------------------------------------------------
 # Run agent
@@ -128,14 +129,13 @@ if run_button and postcode.strip():
             st.stop()
 
     if result.get("errors"):
-        with st.expander("⚠️ Warnings during analysis", expanded=False):
+        with st.expander(f"⚠️ {len(result['errors'])} warning(s) during analysis", expanded=True):
             for err in result["errors"]:
                 st.warning(err)
 
+    ratings = {r.topic: r for r in report.ratings_for(result)}
+
     # ---------------------------------------------------------------------------
-    # Map
-    # ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
     # Map
     # ---------------------------------------------------------------------------
     loc = result.get("location")
@@ -172,7 +172,7 @@ if run_button and postcode.strip():
             color="#166534",
             fill=True,
             fill_opacity=0.05,
-            popup="2km search radius",
+            popup="2 km designation search radius",
         ).add_to(m)
         st_folium(m, width=None, height=380, returned_objects=[], key="main_map")
 
@@ -184,20 +184,17 @@ if run_button and postcode.strip():
 
     col1, col2, col3 = st.columns(3)
 
+    show = {"RED": st.error, "AMBER": st.warning, "GREEN": st.success, "NOT RATED": st.info}
+
     with col1:
         flood = result.get("flood_risk")
         st.markdown("**🌊 Flood Risk**")
         if flood:
-            if flood.severe_warnings > 0:
-                st.error(flood.summary)
-            elif flood.warnings > 0 or flood.alerts > 0:
-                st.warning(flood.summary)
-            else:
-                st.success(flood.summary)
+            show[ratings["Flood risk"].rating](flood.summary)
             if flood.nearby_stations:
                 st.caption("Nearby monitoring stations:")
                 for s in flood.nearby_stations:
-                    st.caption(f"  · {s['name']} ({s['river']})")
+                    st.caption(f"  · {s['name']} ({s['river']})" if s["river"] else f"  · {s['name']}")
         else:
             st.caption("Data unavailable")
 
@@ -205,15 +202,15 @@ if run_button and postcode.strip():
         pa = result.get("protected_areas")
         st.markdown("**🌿 Protected Areas**")
         if pa:
-            if pa.designations:
-                st.warning(f"{len(pa.designations)} designation(s) found")
-                for d in pa.designations[:4]:
-                    st.markdown(
-                        f'<span class="tag">{d.type}</span> {d.name}',
-                        unsafe_allow_html=True
-                    )
-            else:
-                st.success("No designations within 2km")
+            show[ratings["Protected designations"].rating](ratings["Protected designations"].reason)
+            for d in pa.designations[:5]:
+                where = " · covers the site" if d.on_site else ""
+                st.markdown(
+                    f'<span class="tag">{d.type}</span> {d.name}{where}',
+                    unsafe_allow_html=True
+                )
+            if pa.unavailable:
+                st.caption(f"Could not check: {', '.join(pa.unavailable)}")
         else:
             st.caption("Data unavailable")
 
@@ -243,32 +240,29 @@ if run_button and postcode.strip():
         col_img, col_desc = st.columns([1, 2])
         with col_img:
             if uploaded_image:
-                st.image(uploaded_image, use_container_width=True)
+                st.image(uploaded_image, width="stretch")
         with col_desc:
             st.markdown(vis.description)
+            st.caption(f"Described by {vis.model_used}")
 
     # ---------------------------------------------------------------------------
     # Full report
     # ---------------------------------------------------------------------------
     st.divider()
-    st.subheader("📄 Land Intelligence Report")
 
     if result.get("report"):
         st.markdown(result["report"])
     else:
         st.warning("Report could not be generated.")
 
-    # RAG sources
+    # Retrieved policy text, so a reader can check each citation
     rag = result.get("rag")
     if rag and rag.chunks:
-        with st.expander("📚 Policy Document Sources", expanded=False):
+        with st.expander("📚 Retrieved policy extracts", expanded=False):
             for i, chunk in enumerate(rag.chunks, 1):
-                page_str = f", p.{chunk.page}" if chunk.page else ""
-                st.markdown(
-                    f"**[{i}]** {chunk.source}{page_str} "
-                    f"*(relevance: {chunk.score:.2f})*"
-                )
-                st.caption(chunk.text[:300] + "...")
+                st.markdown(f"**[{i}]** {chunk.label} *(relevance: {chunk.score:.2f})*")
+                st.caption(f"Retrieved for: {chunk.query}")
+                st.caption(chunk.text[:400] + "...")
                 st.divider()
 
 elif run_button:
@@ -280,8 +274,8 @@ elif run_button:
 st.divider()
 st.markdown("""
 <div style="text-align:center; color:#94a3b8; font-size:0.85rem;">
-GeoSight uses free public APIs (Environment Agency, Natural England, OpenStreetMap)
-and runs entirely locally via Ollama. No API keys required.<br>
+GeoSight uses free public APIs (Environment Agency, Natural England, OpenStreetMap).
+It runs locally via Ollama with no API keys, or on Groq when a key is set.<br>
 Built by <a href="https://linkedin.com/in/syed-sabeeth" style="color:#64748b;">
 Syed Sabeeth Shoeb</a> ·
 <a href="https://github.com/ssabeeth/geosight" style="color:#64748b;">GitHub</a>

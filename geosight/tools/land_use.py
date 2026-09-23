@@ -7,7 +7,13 @@ import requests
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_fixed
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+# The main Overpass server rejects the default python-requests User-Agent (HTTP 406)
+# and is often busy, so identify ourselves and fall back to a global mirror.
+OVERPASS_URLS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+]
+HEADERS = {"User-Agent": "GeoSight/0.2 (+https://github.com/ssabeeth/geosight)"}
 
 LAND_USE_LABELS = {
     "farmland": "Agricultural farmland",
@@ -51,7 +57,19 @@ class LandUseResult(BaseModel):
     summary: str = ""
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
+@retry(stop=stop_after_attempt(2), wait=wait_fixed(2), reraise=True)
+def _overpass(query: str) -> list[dict]:
+    last_error: Exception | None = None
+    for url in OVERPASS_URLS:
+        try:
+            resp = requests.post(url, data={"data": query}, headers=HEADERS, timeout=30)
+            resp.raise_for_status()
+            return resp.json().get("elements", [])
+        except Exception as e:
+            last_error = e
+    raise RuntimeError(f"all Overpass servers failed: {last_error}")
+
+
 def fetch_land_use(lat: float, lon: float, radius_m: int = 500) -> LandUseResult:
     """
     Query OpenStreetMap Overpass API for land use and natural features near a point.
@@ -67,9 +85,7 @@ def fetch_land_use(lat: float, lon: float, radius_m: int = 500) -> LandUseResult
     out tags;
     """
 
-    resp = requests.post(OVERPASS_URL, data={"data": query}, timeout=30)
-    resp.raise_for_status()
-    elements = resp.json().get("elements", [])
+    elements = _overpass(query)
 
     land_uses: set[str] = set()
     natural_features: set[str] = set()
@@ -98,8 +114,8 @@ def fetch_land_use(lat: float, lon: float, radius_m: int = 500) -> LandUseResult
             ww_name = name or ww.replace("_", " ").title()
             waterways.add(ww_name)
 
-    if not land_uses and not natural_features:
-        summary = f"No detailed land use data found within {radius_m}m."
+    if not land_uses and not natural_features and not waterways:
+        summary = f"OpenStreetMap has no mapped land use within {radius_m} m."
     else:
         parts = []
         if land_uses:

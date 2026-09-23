@@ -1,11 +1,12 @@
 """
-Vision tool — describes a land/site photograph using LLaVA via Ollama.
-Free, runs locally. No API key required.
-Ollama must be running with llava:7b pulled.
+Vision tool — describes a land/site photograph.
+Uses Groq when GROQ_API_KEY is set, otherwise LLaVA via a local Ollama
+(which must be running with llava:7b pulled).
 """
 
 import base64
 import os
+import re
 from pathlib import Path
 
 import requests
@@ -13,6 +14,7 @@ from pydantic import BaseModel
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "llava:7b")
+GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
 
 VISION_PROMPT = """You are a land and environmental analyst examining a site photograph.
 Describe what you observe in structured terms relevant to land use and planning:
@@ -24,6 +26,8 @@ Describe what you observe in structured terms relevant to land use and planning:
 5. **Condition**: well-managed, overgrown, degraded, signs of recent activity
 6. **Estimated Scale & Setting**: approximate area visible, rural/peri-urban/urban
 
+Describe only what is visible in the photograph. If something cannot be judged
+from the image, say so rather than guessing.
 Be concise but specific. This analysis will be combined with geospatial data."""
 
 
@@ -40,7 +44,7 @@ def describe_land_image(
     if image_bytes is None and image_path is None:
         return VisionResult(
             description="No image provided.",
-            model_used=VISION_MODEL,
+            model_used=vision_model_name(),
             image_provided=False,
         )
 
@@ -50,12 +54,11 @@ def describe_land_image(
     # Use Groq vision if API key is present
     groq_key = os.getenv("GROQ_API_KEY")
     if groq_key:
-        import base64 as b64
         from groq import Groq
         client = Groq(api_key=groq_key)
-        image_b64 = b64.b64encode(image_bytes).decode("utf-8")
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
         response = client.chat.completions.create(
-            model="llava-v1.5-7b-4096-preview",
+            model=GROQ_VISION_MODEL,
             messages=[
                 {
                     "role": "user",
@@ -63,7 +66,7 @@ def describe_land_image(
                         {
                             "type": "image_url",
                             "image_url": {
-                                "url": f"data:image/jpeg;base64,{image_b64}"
+                                "url": f"data:{_mime_type(image_bytes)};base64,{image_b64}"
                             }
                         },
                         {
@@ -73,12 +76,12 @@ def describe_land_image(
                     ]
                 }
             ],
-            max_tokens=400,
+            max_tokens=1200,
         )
-        description = response.choices[0].message.content.strip()
+        description = _strip_thinking(response.choices[0].message.content or "")
         return VisionResult(
             description=description,
-            model_used="llava-v1.5-7b-4096-preview",
+            model_used=f"{GROQ_VISION_MODEL} (Groq)",
             image_provided=True,
         )
 
@@ -100,6 +103,25 @@ def describe_land_image(
     description = resp.json().get("response", "No description returned.").strip()
     return VisionResult(
         description=description,
-        model_used=VISION_MODEL,
+        model_used=f"{VISION_MODEL} (Ollama)",
         image_provided=True,
     )
+
+
+def vision_model_name() -> str:
+    if os.getenv("GROQ_API_KEY"):
+        return f"{GROQ_VISION_MODEL} (Groq)"
+    return f"{VISION_MODEL} (Ollama)"
+
+
+def _mime_type(image_bytes: bytes) -> str:
+    if image_bytes.startswith(b"\x89PNG"):
+        return "image/png"
+    if image_bytes[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/jpeg"
+
+
+def _strip_thinking(text: str) -> str:
+    """Some Groq models prefix their answer with a <think>...</think> block."""
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()

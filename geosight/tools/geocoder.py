@@ -1,8 +1,8 @@
 """Geocoding tool — converts UK postcode to coordinates via Nominatim (free, no key)."""
 
 import requests
-from tenacity import retry, stop_after_attempt, wait_fixed
 from pydantic import BaseModel
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 
 class GeoLocation(BaseModel):
@@ -14,7 +14,13 @@ class GeoLocation(BaseModel):
     country: str = "United Kingdom"
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(1))
+# Retry network errors only; an unknown postcode won't improve on a second try.
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(1),
+    retry=retry_if_exception_type(requests.RequestException),
+    reraise=True,
+)
 def geocode_postcode(postcode: str) -> GeoLocation:
     url = "https://nominatim.openstreetmap.org/search"
     params = {
@@ -24,7 +30,7 @@ def geocode_postcode(postcode: str) -> GeoLocation:
         "addressdetails": 1,
         "limit": 1,
     }
-    headers = {"User-Agent": "GeoSight/0.1 (github.com/ssabeeth/geosight)"}
+    headers = {"User-Agent": "GeoSight/0.2 (+https://github.com/ssabeeth/geosight)"}
 
     response = requests.get(url, params=params, headers=headers, timeout=10)
     response.raise_for_status()
