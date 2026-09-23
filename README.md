@@ -106,7 +106,7 @@ the app flags that. Groq's larger model cites consistently.
 
 ### Tests
 ```bash
-pytest          # 47 tests, all offline: HTTP is mocked and the model is faked
+pytest          # 50 tests, all offline: HTTP is mocked and the model is faked
 ruff check .
 python scripts/smoke.py "SP6 1EF"   # one real end-to-end run against the live APIs
 ```
