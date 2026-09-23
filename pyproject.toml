@@ -4,20 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "geosight"
-version = "0.1.0"
+version = "0.2.0"
 description = "UK Land Intelligence Agent"
 requires-python = ">=3.11"
 dependencies = [
     "langgraph>=0.2",
-    "langchain>=0.3",
-    "langchain-community>=0.3",
+    "langchain-core>=0.3",
     "langchain-ollama>=0.2",
+    "langchain-groq>=0.3",
+    "groq>=0.30",
     "sentence-transformers>=3.0",
     "faiss-cpu>=1.8",
     "requests>=2.31",
-    "pyproj>=3.0",
     "pypdf>=4.0",
-    "streamlit>=1.35",
+    "streamlit>=1.50",
     "streamlit-folium>=0.20",
     "folium>=0.17",
     "python-dotenv>=1.0",
@@ -26,8 +26,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.4"]
+dev = ["pytest>=8.0", "responses>=0.25", "ruff>=0.4"]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["geosight*"]
+
+[tool.setuptools.package-data]
+geosight = ["rag/index/*"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

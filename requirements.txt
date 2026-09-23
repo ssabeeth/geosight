@@ -1,17 +1,16 @@
+# Used by Streamlit Community Cloud. Keep in step with pyproject.toml.
 langgraph>=0.2
-langchain>=0.3
-langchain-community>=0.3
+langchain-core>=0.3
 langchain-ollama>=0.2
-langchain-groq>=0.1
+langchain-groq>=0.3
+groq>=0.30
 sentence-transformers>=3.0
 faiss-cpu>=1.8
 requests>=2.31
 pypdf>=4.0
-streamlit>=1.35
+streamlit>=1.50
 streamlit-folium>=0.20
 folium>=0.17
 python-dotenv>=1.0
 pydantic>=2.0
 tenacity>=8.0
-pyproj>=3.0
-groq>=0.4

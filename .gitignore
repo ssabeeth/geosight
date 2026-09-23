@@ -1,7 +1,9 @@
 .venv/
 __pycache__/
 *.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
 .env
 *.DS_Store
 geosight/rag/docs/
-
