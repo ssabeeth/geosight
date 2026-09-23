@@ -11,9 +11,10 @@ import numpy as np
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 
+_INDEX_DIR = Path(__file__).parent / "index"
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
-FAISS_INDEX_PATH = os.getenv("FAISS_INDEX_PATH", "geosight/rag/index/faiss.index")
-FAISS_META_PATH = os.getenv("FAISS_META_PATH", "geosight/rag/index/metadata.json")
+FAISS_INDEX_PATH = os.getenv("FAISS_INDEX_PATH", str(_INDEX_DIR / "faiss.index"))
+FAISS_META_PATH = os.getenv("FAISS_META_PATH", str(_INDEX_DIR / "metadata.json"))
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "5"))
 
 # Load once, reuse across queries
@@ -38,40 +39,69 @@ class RetrievedChunk(BaseModel):
     text: str
     source: str
     page: int | None = None
+    section: str | None = None
+    url: str | None = None
     score: float
+    query: str = ""
+
+    @property
+    def location(self) -> str:
+        """Where in the document the chunk came from, for citations."""
+        if self.page:
+            return f"p.{self.page}"
+        if self.section:
+            return f'section "{self.section}"'
+        return ""
+
+    @property
+    def label(self) -> str:
+        return f"{self.source}, {self.location}" if self.location else self.source
 
 
 class RAGResult(BaseModel):
-    query: str
+    queries: list[str]
     chunks: list[RetrievedChunk]
     context: str
 
 
-def retrieve(query: str, top_k: int = RAG_TOP_K) -> RAGResult:
+def _format_context(chunks: list[RetrievedChunk]) -> str:
+    return "\n\n---\n\n".join(f"[{i}] Source: {c.label}\n{c.text}" for i, c in enumerate(chunks, 1))
+
+
+def retrieve_many(queries: list[str], per_query: int = 2, max_chunks: int = 6) -> RAGResult:
     """
-    Retrieve the most relevant policy chunks for a given query.
+    Run each query and keep its best `per_query` chunks, skipping duplicates,
+    so every topic in the report gets its own policy evidence instead of one
+    topic crowding out the rest.
     """
     model, index, metadata = _load_resources()
+    query_vecs = model.encode(queries, normalize_embeddings=True).astype(np.float32)
+    # Over-fetch so duplicates across queries can be skipped.
+    scores, ids = index.search(query_vecs, per_query + max_chunks)
 
-    query_vec = model.encode([query], normalize_embeddings=True).astype(np.float32)
-    distances, indices = index.search(query_vec, top_k)
+    chunks: list[RetrievedChunk] = []
+    seen: set[int] = set()
+    for query, row_scores, row_ids in zip(queries, scores, ids, strict=True):
+        taken = 0
+        for score, idx in zip(row_scores, row_ids, strict=True):
+            if idx == -1 or idx in seen or taken == per_query:
+                continue
+            seen.add(int(idx))
+            taken += 1
+            meta = metadata[idx]
+            chunks.append(RetrievedChunk(
+                text=meta["text"],
+                source=meta["source"],
+                page=meta.get("page"),
+                section=meta.get("section"),
+                url=meta.get("url"),
+                score=float(score),  # cosine similarity from IndexFlatIP
+                query=query,
+            ))
+    chunks = chunks[:max_chunks]
+    return RAGResult(queries=queries, chunks=chunks, context=_format_context(chunks))
 
-    chunks = []
-    for dist, idx in zip(distances[0], indices[0]):
-        if idx == -1:
-            continue
-        meta = metadata[idx]
-        chunks.append(RetrievedChunk(
-            text=meta["text"],
-            source=meta["source"],
-            page=meta.get("page"),
-            score=float(dist),  # cosine similarity from IndexFlatIP
-        ))
 
-    context_parts = []
-    for i, c in enumerate(chunks, 1):
-        page_str = f", p.{c.page}" if c.page else ""
-        context_parts.append(f"[{i}] Source: {c.source}{page_str}\n{c.text}")
-    context = "\n\n---\n\n".join(context_parts)
-
-    return RAGResult(query=query, chunks=chunks, context=context)
+def retrieve(query: str, top_k: int = RAG_TOP_K) -> RAGResult:
+    """Retrieve the most relevant policy chunks for a single query."""
+    return retrieve_many([query], per_query=top_k, max_chunks=top_k)
